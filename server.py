@@ -66,8 +66,7 @@ def add_player_to_map(pid):
         else:
             players_movement[pid] = {
                 'position': (0, 0, 0),
-                'rotation': {'x': 0, 'y': 0, 'z': 0},
-                'scale': {'x': 1, 'y': 1, 'z': 1},
+                'rotationY': 0,
                 'state': 'idle',
                 'last_update': time.time()
             }
@@ -135,21 +134,12 @@ def on_client_move_message(ch, method, properties, body):
                 'y': msg.get('posY', 0),
                 'z': msg.get('posZ', 0)
             }
-            rot = {
-                'x': msg.get('rotX', 0),
-                'y': msg.get('rotY', 0),
-                'z': msg.get('rotZ', 0)
-            }
-            scl = {
-                'x': msg.get('sclX', 1),
-                'y': msg.get('sclY', 1),
-                'z': msg.get('sclZ', 1)
-            }
+            rotY = msg.get('rotY', 0)
+
             ts = msg.get('timestamp', time.time())                    
             players_movement[pid] = {
                 'position': (pos['x'], pos['y'], pos['z']), # Pozycja X,Y,Z
-                'rotation': rot, # Rotacja X,Y,Z
-                'scale': scl, # Skala X,Y,Z
+                'rotationY': rotY, # Rotacja Y
                 'state': state, # Stan gracza (np. "idle", "running", "jumping", "sprinting")
                 'last_update': ts
             }
@@ -257,14 +247,12 @@ def build_players_json():
             players.append(pid)  # Dodajemy ID gracza do listy
             
             pos = movement.get('position', (0, 0, 0))
-            rot = movement.get('rotation', {'x': 0, 'y': 0, 'z': 0})
-            scl = movement.get('scale', {'x': 1, 'y': 1, 'z': 1})
+            rotY = movement.get('rotationY', 0)
             state = movement.get('state', 'idle')  # Domyślny stan to 'idle'
             updates.append({
                 'id': pid,
                 'position': {'x': pos[0], 'y': pos[1], 'z': pos[2]},
-                'rotation': rot,
-                'scale': scl,
+                'rotationY': rotY,
                 'state': state, # Stan gracza
                 'timestamp': movement.get('last_update')
             })
