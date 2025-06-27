@@ -67,7 +67,6 @@ def add_player_to_map(pid):
             players_movement[pid] = {
                 'position': (0, 0, 0),
                 'rotationY': 0,
-                'state': 'idle',
                 'last_update': time.time()
             }
             print(f"Gracz {pid} dołączył do gry (join).")
@@ -140,7 +139,6 @@ def on_client_move_message(ch, method, properties, body):
             players_movement[pid] = {
                 'position': (pos['x'], pos['y'], pos['z']), # Pozycja X,Y,Z
                 'rotationY': rotY, # Rotacja Y
-                'state': state, # Stan gracza (np. "idle", "running", "jumping", "sprinting")
                 'last_update': ts
             }
         except Exception as e:
@@ -166,7 +164,7 @@ def on_client_interaction_message(ch, method, properties, body):
     except Exception as e:
         print("Błąd w on_client_interaction_message:", e)
 
-def on_client_annimation_message(ch, method, properties, body):
+def on_client_animation_message(ch, method, properties, body):
     try:
         msg = json.loads(body)
         response = {
@@ -174,7 +172,7 @@ def on_client_annimation_message(ch, method, properties, body):
             "animation": msg.get("animation"),
             "timestamp": time.time()
         }
-        
+
         players = get_active_players()
         for player_id in players:
             channel.basic_publish(
@@ -184,7 +182,7 @@ def on_client_annimation_message(ch, method, properties, body):
             )
         
     except Exception as e:
-        print("Błąd w on_client_annimation_message:", e)
+        print("Błąd w on_client_animation_message:", e)
         
 def on_client_player_transfer_message(ch, method, properties, body):
     try:
@@ -196,9 +194,6 @@ def on_client_player_transfer_message(ch, method, properties, body):
             "playerId": player_id,
             "from": msg.get("from"),
             "to": msg.get("to"),
-            "stanZdrowia": msg.get("stanZdrowia"),
-            "cytryny": msg.get("cytryny"),
-            "igly": msg.get("igly"),
             "timestamp": msg.get("timestamp", time.time())
         }
         
@@ -225,7 +220,7 @@ def on_server_player_transfer_message(ch, method, properties, body):
 def start_server_consume():
     channel.basic_consume(queue=MOVEMENT_SERVER_QUEUE, on_message_callback=on_client_move_message, auto_ack=True)
     channel.basic_consume(queue=INTERACTIONS_SERVER_QUEUE, on_message_callback=on_client_interaction_message, auto_ack=True)
-    channel.basic_consume(queue=ANIMATIONS_SERVER_QUEUE, on_message_callback=on_client_annimation_message, auto_ack=True)
+    channel.basic_consume(queue=ANIMATIONS_SERVER_QUEUE, on_message_callback=on_client_animation_message, auto_ack=True)
     channel.basic_consume(queue=PLAYER_TRANSFER_SERVER_QUEUE, on_message_callback=on_client_player_transfer_message, auto_ack=True)
     channel.basic_consume(queue=TRANSFER_TO_SERVER_QUEUE, on_message_callback=on_server_player_transfer_message, auto_ack=True)
     channel.basic_consume(queue=JOIN_SERVER_QUEUE, on_message_callback=on_client_join_message, auto_ack=True)
@@ -248,12 +243,10 @@ def build_players_json():
             
             pos = movement.get('position', (0, 0, 0))
             rotY = movement.get('rotationY', 0)
-            state = movement.get('state', 'idle')  # Domyślny stan to 'idle'
             updates.append({
                 'id': pid,
                 'position': {'x': pos[0], 'y': pos[1], 'z': pos[2]},
                 'rotationY': rotY,
-                'state': state, # Stan gracza
                 'timestamp': movement.get('last_update')
             })
         return players, json.dumps({'updates': updates}) if updates else None
