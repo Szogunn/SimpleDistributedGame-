@@ -69,14 +69,14 @@ def add_player_to_map(pid):
                 'rotationY': 0,
                 'last_update': time.time()
             }
-            print(f"Gracz {pid} dołączył do gry (join).")
+            print(f"Gracz {pid} dołączył do serwera (join).")
 
 def remove_player_from_map(pid):
     with players_lock:
         if pid in players_movement:
             del players_movement[pid]
             
-            print(f"Gracz {pid} opuścił grę (leave).")
+            print(f"Gracz {pid} opuścił serwer (leave).")
              # (opcjonalnie: powiadom innych graczy, jak było wcześniej)
             players = players_movement.keys()
             response = {
@@ -98,6 +98,7 @@ def on_client_join_message(ch, method, properties, body):
     try:
         msg = json.loads(body)
         pid = msg.get("id") or msg.get("playerId")
+        print(f"Gracz {pid} dołącza do gry (join).")
         if not pid:
             print("Brak ID gracza w wiadomości join.")
             return
@@ -109,6 +110,7 @@ def on_client_leave_message(ch, method, properties, body):
     try:
         msg = json.loads(body)
         pid = msg.get("id") or msg.get("playerId")
+        print(f"Gracz {pid} opuszcza grę (leave).")
         if not pid:
             print("Brak ID gracza w wiadomości leave.")
             return
@@ -196,7 +198,7 @@ def on_client_player_transfer_message(ch, method, properties, body):
             "timestamp": msg.get("timestamp", time.time())
         }
         
-        print(f"Przesyłam transfer gracza {response['playerId']} z {response['from']} do {response['to']}")
+        print(f"Gracz {response['playerId']} przeniesiony z serwera {response['from']} na serwer {response['to']}")
         target = msg.get("to")
         player_id = msg.get("playerId"),
         channel.basic_publish(
