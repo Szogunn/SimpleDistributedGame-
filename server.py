@@ -126,19 +126,18 @@ def on_client_move_message(ch, method, properties, body):
             if pid not in active_players:
                 print(f"Gracz {pid} nie jest aktywny, ignoruję wiadomość.")
                 return            
-                      
-            state = msg.get('state')
+
             pos = {
                 'x': msg.get('posX', 0),
                 'y': msg.get('posY', 0),
                 'z': msg.get('posZ', 0)
             }
-            rotY = msg.get('rotY', 0)
+            rotation_y = msg.get('rotY', 0)
 
             ts = msg.get('timestamp', time.time())                    
             players_movement[pid] = {
                 'position': (pos['x'], pos['y'], pos['z']), # Pozycja X,Y,Z
-                'rotationY': rotY, # Rotacja Y
+                'rotationY': rotation_y, # Rotacja Y
                 'last_update': ts
             }
         except Exception as e:
@@ -249,6 +248,7 @@ def build_players_json():
                 'rotationY': rotY,
                 'timestamp': movement.get('last_update')
             })
+        #print(f"build_players_json: players={players}, updates={updates}")
         return players, json.dumps({'updates': updates}) if updates else None
 
 
@@ -257,18 +257,25 @@ def tick_broadcast():
     connection_mov = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
     channel_mov = connection_mov.channel()
     channel_mov.exchange_declare(exchange=EXCHANGE_M2C, exchange_type='topic')
-    
-    while True:
-        players, body = build_players_json()
-        if body is not None :
-            for player_id in players:
-                channel_mov.basic_publish(
-                    exchange=EXCHANGE_M2C,
-                    routing_key=f'movement.{player_id}',
-                    body=body
-                )   
-
-        time.sleep(TICK_INTERVAL)
+    try:
+        while True:
+            players, body = build_players_json()
+            if body is not None :
+                #print(f"tick_broadcast: sending to players={players}, body={body}")
+                for player_id in players:
+                    channel_mov.basic_publish(
+                        exchange=EXCHANGE_M2C,
+                        routing_key=f'movement.{player_id}',
+                        body=body
+                    )
+            #else:
+                #print("tick_broadcast: no updates to send")
+            time.sleep(TICK_INTERVAL)
+    except Exception as e:
+        print(f"Error in tick_broadcast: {e}")
+    finally:
+        channel_mov.close()
+        connection_mov.close()
 
 if __name__ == '__main__':
     def cleanup_inactive():
