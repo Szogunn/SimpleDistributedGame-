@@ -92,11 +92,18 @@ Klient może być uruchomiony w dowolnej liczbie instancji. Każdy klient powini
 ```json
 {
   "playerId": "twoj_player_id",
-  "interaction": "jump",
-  "started": true,
+  "interaction": "shop",
   "timestamp": 1719060000
 }
 ```
+**Dostęp do obiektu shop (żabka).** </br>
+Request o dostęp do obiektu żabka klient wysyła jako interakcję z polem ``` "interaction": "shop" ```. </br>
+W odpowiedzi serwer udziela jedną z trzech odpowiedzi:
+- `"result" = "success" "action" = "entered"` 
+- `"result" = "success" "action" = "exited"` 
+- `"result" = "fail" "action" = "shop_occupied_by_player_{shop_owner}"`  </br>
+
+Komunikat zwrotny jest odsyłany tylko do gracza, kóry wysłał request o dostęp do obiektu.
 
 ### 5. Wysyłanie animacji
 
