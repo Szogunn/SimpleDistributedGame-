@@ -46,7 +46,7 @@ def send_interaction():
         interaction = {
             "type": "action",
             "playerId": PLAYER_ID,
-            "interaction": random.choice(["jump", "run", "attack"]),
+            "interaction": random.choice(["dialog", "shop"]),
             "started": True,
             "timestamp": time.time()
         }
@@ -118,10 +118,11 @@ def interactions(ch, method, properties, body):
     try:
         msg = json.loads(body)
         pid = msg.get('playerId')
-        interaction = msg.get('interaction')
+        interaction = msg.get('action', msg.get('interaction'))
         with players_lock:
             if interaction == 'left':
                 if pid in players:
+                    print(f"Gracz {pid} opuścił grę.")
                     del players[pid]
             else:
                 last_interactions[pid] = interaction
@@ -154,7 +155,7 @@ def send_transfer():
     connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
     channel = connection.channel()
     while True:
-        time.sleep(30)
+        time.sleep(90)
         with players_lock:
             players.clear()  # Wyczyść listę graczy przed transferem
         new_zone = 'desert' if ZONE == 'forest' else 'forest'

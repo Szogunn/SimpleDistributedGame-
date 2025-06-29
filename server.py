@@ -9,6 +9,9 @@ if len(sys.argv) > 1:
     ZONE = sys.argv[1]
 else:
     ZONE = 'forest'  # Domyślna strefa
+    
+shop_lock = threading.Lock()
+shop_owner = None  # player_id gracza, który wszedł do shop, lub None
 
 EXCHANGE_C2S = 'game.client_to_server'
 EXCHANGE_M2C = 'game.movement_to_client'
@@ -72,8 +75,14 @@ def add_player_to_map(pid):
             print(f"Gracz {pid} dołączył do serwera (join).")
 
 def remove_player_from_map(pid):
+    global shop_owner
+    
     with players_lock:
-        if pid in players_movement:
+        if pid in players_movement:            
+            with shop_lock:
+                if shop_owner == pid:
+                    shop_owner = None
+            
             del players_movement[pid]
             
             print(f"Gracz {pid} opuścił serwer (leave).")
@@ -146,22 +155,53 @@ def on_client_move_message(ch, method, properties, body):
             print("Błąd w on_client_message:", e)
             
 def on_client_interaction_message(ch, method, properties, body):
+    global shop_owner
+    
     try:
         msg = json.loads(body)
+        player_id = msg.get("playerId")
+        interaction = msg.get("interaction")
         response = {
-            "playerId": msg.get("playerId"),
-            "interaction": msg.get("interaction"),
+            "playerId": player_id,
+            "interaction": interaction,
             "timestamp": time.time()
         }
-        
-        players = get_active_players()
-        for player_id in players:
+
+        # Obsługa logiki sklepu
+        if interaction == "shop":
+            with shop_lock:
+                if shop_owner is None:
+                    # Przypisz własność sklepu
+                    shop_owner = player_id
+                    response["result"] = "success"
+                    response["action"] = "entered"
+                elif shop_owner == player_id:
+                    # Zwolnij sklep
+                    shop_owner = None
+                    response["result"] = "success"
+                    response["action"] = "exited"
+                else:
+                    # Sklep zajęty przez innego gracza
+                    response["result"] = "fail"
+                    response["action"] = f"shop_occupied_by_player_{shop_owner}"
+            
+            # Wyślij odpowiedź tylko do zainteresowanego gracza
             channel.basic_publish(
                 exchange=EXCHANGE_I2C,
                 routing_key=f'interactions.{player_id}',
                 body=json.dumps(response)
             )
-        
+            return
+
+        # Dla innych interakcji - broadcast do wszystkich
+        players = get_active_players()
+        for p_id in players:
+            channel.basic_publish(
+                exchange=EXCHANGE_I2C,
+                routing_key=f'interactions.{p_id}',
+                body=json.dumps(response)
+            )
+            
     except Exception as e:
         print("Błąd w on_client_interaction_message:", e)
 
