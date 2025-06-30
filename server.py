@@ -27,10 +27,10 @@ LEAVE_SERVER_QUEUE = f"leave_server_queue_{ZONE}"
 PLAYER_TRANSFER_SERVER_QUEUE = f"player_transfer_{ZONE}"
 TRANSFER_TO_SERVER_QUEUE = f"transfer_to_server_{ZONE}"
 
-TICK_INTERVAL = 0.1  # 100 ms
+TICK_INTERVAL = 0.25  # 250 ms
 
 # Mapa: player_id -> stan gracza; nadpisanie tego samego player_id aktualizuje dane
-players_movement = {}  # player_id -> {'position': (x,y,z), 'rotation':..., 'last_update': timestamp}
+players_movement = {}  # player_id -> {'name', 'position': (x,y,z), 'rotation':..., 'last_update': timestamp}
 
 # Połączenie RabbitMQ
 connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
@@ -61,13 +61,14 @@ channel.queue_bind(exchange=EXCHANGE_C2S, queue=PLAYER_TRANSFER_SERVER_QUEUE, ro
 channel.queue_declare(queue=TRANSFER_TO_SERVER_QUEUE, durable=False)
 channel.queue_bind(exchange=EXCHANGE_PT, queue=TRANSFER_TO_SERVER_QUEUE, routing_key= f"transfer.*.{ZONE}")
 
-def add_player_to_map(pid):
+def add_player_to_map(pid, name):
     with players_lock:
         if pid in players_movement:
             print(f"Gracz {pid} już istnieje, aktualizuję jego dane.")
             players_movement[pid]['last_update'] = time.time()
         else:
             players_movement[pid] = {
+                'name': name,
                 'position': (0, 0, 0),
                 'rotationY': 0,
                 'last_update': time.time()
@@ -107,11 +108,12 @@ def on_client_join_message(ch, method, properties, body):
     try:
         msg = json.loads(body)
         pid = msg.get("id") or msg.get("playerId")
-        print(f"Gracz {pid} dołącza do gry (join).")
+        name = msg.get("name")
+        print(f"Gracz {pid} imie: {name} dołącza do gry (join).")
         if not pid:
             print("Brak ID gracza w wiadomości join.")
             return
-        add_player_to_map(pid)
+        add_player_to_map(pid, name)
     except Exception as e:
         print("Błąd w on_client_join_message:", e)
 
@@ -138,6 +140,7 @@ def on_client_move_message(ch, method, properties, body):
                 print(f"Gracz {pid} nie jest aktywny, ignoruję wiadomość.")
                 return            
 
+            name = msg.get("name")
             pos = {
                 'x': msg.get('posX', 0),
                 'y': msg.get('posY', 0),
@@ -147,6 +150,7 @@ def on_client_move_message(ch, method, properties, body):
 
             ts = msg.get('timestamp', time.time())                    
             players_movement[pid] = {
+                'name': name,
                 'position': (pos['x'], pos['y'], pos['z']), # Pozycja X,Y,Z
                 'rotationY': rotation_y, # Rotacja Y
                 'last_update': ts
@@ -230,9 +234,11 @@ def on_client_player_transfer_message(ch, method, properties, body):
         
         msg = json.loads(body)
         player_id = msg.get("playerId")
+        name = msg.get("name")
         remove_player_from_map(player_id)
         response = {
             "playerId": player_id,
+            "name": name,
             "from": msg.get("from"),
             "to": msg.get("to"),
             "timestamp": msg.get("timestamp", time.time())
@@ -240,7 +246,7 @@ def on_client_player_transfer_message(ch, method, properties, body):
         
         print(f"Gracz {response['playerId']} przeniesiony z serwera {response['from']} na serwer {response['to']}")
         target = msg.get("to")
-        player_id = msg.get("playerId"),
+        player_id = msg.get("playerId")
         channel.basic_publish(
             exchange=EXCHANGE_PT,
             routing_key=f"transfer.{ZONE}.{target}",
@@ -253,7 +259,8 @@ def on_server_player_transfer_message(ch, method, properties, body):
     try:
         msg = json.loads(body)
         player_id = msg.get("playerId")
-        add_player_to_map(player_id)
+        name = msg.get("name")
+        add_player_to_map(player_id, name)
         
     except Exception as e:
         print("Błąd w on_server_player_transfer_message:", e)
@@ -281,11 +288,13 @@ def build_players_json():
         updates = []
         for pid, movement in players_movement.items():
             players.append(pid)  # Dodajemy ID gracza do listy
-            
+
+            name = movement["name"]
             pos = movement.get('position', (0, 0, 0))
             rotY = movement.get('rotationY', 0)
             updates.append({
                 'id': pid,
+                'name': name,
                 'position': {'x': pos[0], 'y': pos[1], 'z': pos[2]},
                 'rotationY': rotY,
                 'timestamp': movement.get('last_update')
